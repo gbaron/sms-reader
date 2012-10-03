@@ -1,0 +1,238 @@
+package guyb.carassistant;
+
+import guyb.smsreader.R;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.ContentResolver;
+import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.media.AudioManager;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.provider.ContactsContract.PhoneLookup;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.TextToSpeech.OnInitListener;
+import android.speech.tts.TextToSpeech.OnUtteranceCompletedListener;
+import android.telephony.SmsMessage;
+import android.util.Log;
+import android.widget.Toast;
+
+public class SpeechService extends Service implements OnInitListener,
+		OnUtteranceCompletedListener {
+
+	private static final String TAG = "SpeechService";
+	public static final String EXTRA_SMS_DATA = "smsData";
+	private static final int NOTIF_ID = 535;
+
+	private TextToSpeech mTts;
+	private boolean mIsReady = false;
+	private SmsMessage sms;
+	private Context context;
+	private ContentResolver resolver;
+	private ConcurrentLinkedQueue<Message> messages = new ConcurrentLinkedQueue<SpeechService.Message>();
+
+	private class Message {
+		String intro;
+		String from;
+		String msg;
+
+		public Message(String intro, String from, String msg) {
+			this.intro = intro;
+			this.from = from;
+			this.msg = msg;
+		}
+
+		public void play(TextToSpeech tts) {
+
+			Log.i(TAG, "SpeechService.Message:play T="
+					+ Thread.currentThread().getId());
+
+			HashMap<String, String> params = new HashMap();
+			params.put(TextToSpeech.Engine.KEY_PARAM_STREAM,
+					String.valueOf(AudioManager.STREAM_MUSIC));
+
+			Log.i(TAG, "SpeechService.Message:play " + intro);
+			tts.speak(intro, TextToSpeech.QUEUE_FLUSH, params);
+			tts.playSilence(500, TextToSpeech.QUEUE_ADD, params);
+
+			if (from != null) {
+
+				Log.i(TAG, "SpeechService.Message:play " + from);
+				tts.speak(from, TextToSpeech.QUEUE_ADD, params);
+
+				tts.playSilence(500, TextToSpeech.QUEUE_ADD, params);
+			}
+
+			Log.i(TAG,
+					"SpeechService.Message:play " + sms.getDisplayMessageBody()
+							+ " T=" + Thread.currentThread().getId());
+
+			params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, intro + from
+					+ msg);
+
+			tts.speak(sms.getDisplayMessageBody(), TextToSpeech.QUEUE_ADD,
+					params);
+
+		}
+
+	}
+
+	public SpeechService() {
+
+	}
+
+	@Override
+	public void onCreate() {
+		Log.v(TAG, "SpeechService:onCreate T=" + Thread.currentThread().getId());
+		super.onCreate();
+
+		context = this.getApplicationContext();
+		resolver = context.getContentResolver();
+
+		NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+		int icon = R.drawable.ic_launcher;
+		CharSequence tickerText = "Hello";
+		long when = System.currentTimeMillis();
+
+		Notification notification = new Notification(icon, tickerText, when);
+
+		Context context = getApplicationContext();
+		CharSequence contentTitle = "Car Assistant";
+		CharSequence contentText = "It will read your incoming text messages";
+		// Intent notificationIntent = new Intent(this, MyClass.class);
+		// PendingIntent contentIntent = PendingIntent.getActivity(this, 0,
+		// notificationIntent, 0);
+
+		notification.setLatestEventInfo(context, contentTitle, contentText,
+				null);
+
+		startForeground(NOTIF_ID, notification);
+	}
+
+	@Override
+	public IBinder onBind(Intent arg0) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public int onStartCommand(Intent intent, int flags, int startId) {
+
+		if (intent == null) {
+			stopSelf();
+			return super.onStartCommand(intent, flags, startId);
+		}
+		Bundle pudsBundle = intent.getExtras();
+
+		Log.v(TAG, "SpeechService:onHandleIntent " + pudsBundle);
+
+		Object[] pdus = (Object[]) pudsBundle.get("pdus");
+		sms = SmsMessage.createFromPdu((byte[]) pdus[0]);
+		Log.i(TAG, sms.toString());
+
+		Log.v(TAG, "SpeechService:onHandleIntent mTts=" + mTts);
+		if (mTts == null) {
+			mTts = new TextToSpeech(context.getApplicationContext(), this);
+		}
+
+		String intro = "Incoming message";
+		String from = sms.getDisplayOriginatingAddress();
+		if (from != null) {
+
+			Cursor c = null;
+			try {
+				Uri uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI,
+						Uri.encode(from));
+
+				c = resolver.query(uri,
+						new String[] { PhoneLookup.DISPLAY_NAME }, null, null,
+						null);
+
+				if (c.getCount() > 0) {
+					c.moveToFirst();
+
+					from = c.getString(0);
+				}
+			} finally {
+				if (c != null) {
+					c.close();
+				}
+			}
+
+			intro += " from";
+		}
+
+		messages.offer(new Message(intro, from, sms.getDisplayMessageBody()));
+
+		return super.onStartCommand(intent, flags, startId);
+	}
+
+	@Override
+	public void onInit(int arg0) {
+		Log.v(TAG, "SpeechService:onInit " + mIsReady);
+
+		mTts.setOnUtteranceCompletedListener(this);
+
+		Locale l = Locale.getDefault();
+		int result = mTts.isLanguageAvailable(l);
+		if (result == TextToSpeech.LANG_AVAILABLE
+				|| result == TextToSpeech.LANG_COUNTRY_AVAILABLE
+				|| result == TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE) {
+
+			mTts.setLanguage(l);
+		} else {
+			Toast.makeText(context, "Lang not available:" + result,
+					Toast.LENGTH_LONG).show();
+		}
+
+		mTts.setSpeechRate(0.85f);
+		Log.i(TAG, "SpeechService:onInit " + Thread.currentThread().getId());
+
+		playNext();
+	}
+
+	@Override
+	public void onDestroy() {
+		Log.w(TAG, "SpeechService:onDestroy ");
+		super.onDestroy();
+
+		if (mTts != null) {
+			mTts.shutdown();
+		}
+	}
+
+	@Override
+	public void onUtteranceCompleted(String arg0) {
+		Log.v(TAG, "SpeechService:onUtteranceCompleted " + arg0);
+		playNext();
+	}
+
+	private void playNext() {
+		Message m = messages.poll();
+		if (m == null) {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				Log.e(TAG, "SpeechService:onUtteranceCompleted " + e);
+				e.printStackTrace();
+			}
+			m = messages.poll();
+		}
+
+		if (m != null) {
+			m.play(mTts);
+		} else {
+			stopSelf();
+			Log.i(TAG, "SpeechService:playNext StopSelf");
+		}
+	}
+
+}

@@ -1,0 +1,163 @@
+package guyb.smsreader;
+
+import android.app.Activity;
+import android.app.UiModeManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.view.Menu;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
+import android.widget.TextView;
+
+import com.google.android.apps.analytics.GoogleAnalyticsTracker;
+import guyb.smsreader.R;
+
+public class MainActivity extends Activity implements OnClickListener {
+
+	// private static final String TAG = "MainActivity";
+	private static final int MY_DATA_CHECK_CODE = 111;
+
+	public static final String MANUAL_KEY = "Manual";
+
+	private GoogleAnalyticsTracker tracker;
+	private TextView mainText;
+	private TextView descText;
+	private Button button;
+
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
+
+		mainText = (TextView) findViewById(R.id.textView1);
+		descText = (TextView) findViewById(R.id.textView2);
+		button = (Button) findViewById(R.id.button1);
+
+		
+		findViewById(R.id.enable_car).setOnClickListener(this);
+		findViewById(R.id.disable_car).setOnClickListener(this);
+		
+		button.setOnClickListener(this);
+
+		Intent checkIntent = new Intent();
+		checkIntent.setAction(TextToSpeech.Engine.ACTION_CHECK_TTS_DATA);
+		startActivityForResult(checkIntent, MY_DATA_CHECK_CODE);
+
+		
+		tracker = GoogleAnalyticsTracker.getInstance();
+		tracker.startNewSession("UA-35090171-1", 20, getApplicationContext());
+		tracker.trackPageView("MainActivity");
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+
+		updateUI(IncomingService.isRunning);
+	}
+
+	private void updateUI(boolean isRunning) {
+		
+		
+		if (isRunning) {
+			mainText.setText(R.string.service_is_running);
+			descText.setText(R.string.running_description);
+			button.setText(R.string.stop);
+		} else {
+			mainText.setText(R.string.service_is_not_running);
+			descText.setText(R.string.not_running_description);
+			button.setText(R.string.start);
+
+		}
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.activity_main, menu);
+		return true;
+	}
+
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+		// Log.v(TAG, "MainActivity:onActivityResult ");
+		//
+		// Bundle b = data.getExtras();
+		// ArrayList<String> langs =
+		// b.getStringArrayList(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES);
+		//
+		//
+		// for (String s : langs) {
+		// Log.v(TAG, "MainActivity:onActivityResult " + s);
+		// }
+
+		// if (requestCode == MY_DATA_CHECK_CODE) {
+		//
+		// if (resultCode == TextToSpeech.Engine.CHECK_VOICE_DATA_PASS) {
+		// // success, create the TTS instance
+		//
+		// } else {
+		// // missing data, install it
+		// Intent installIntent = new Intent();
+		// installIntent
+		// .setAction(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA);
+		// startActivity(installIntent);
+		// }
+		// }
+	}
+
+	@Override
+	public void onClick(View v) {
+
+		// String msg = "";
+		 UiModeManager uiManager = (UiModeManager)
+		 getSystemService(Context.UI_MODE_SERVICE);
+		
+		 if (v.getId() == R.id.enable_car) {
+		 uiManager.enableCarMode(0);
+//		 msg = getString(R.string.car_mode_enabled);
+		
+		 } else if (v.getId() == R.id.disable_car) {
+		 uiManager.disableCarMode(0);
+//		 msg = getString(R.string.car_mode_disabled);
+		 }
+		//
+		// Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+
+		if (v.getId() == R.id.button1) {
+
+			boolean isRunning = IncomingService.isRunning;
+			if (!isRunning) {
+
+				tracker.trackEvent("MainActivity", "Button1", "start", 0);
+				
+				Intent t = new Intent(this, IncomingService.class);
+				t.putExtra(MANUAL_KEY, true);
+
+				startService(t);
+
+			} else {
+				tracker.trackEvent("MainActivity", "Button1", "stop", 0);
+				
+				stopService(new Intent(this, IncomingService.class));
+			}
+
+			updateUI(!isRunning);
+		}
+	}
+
+	// @Override
+	// public void onUtteranceCompleted(String utteranceId) {
+	// // TODO Auto-generated method stub
+	//
+	// }
+	//
+	@Override
+	  protected void onDestroy() {
+	    super.onDestroy();
+	    // Stop the tracker when it is no longer needed.
+	    tracker.stopSession();
+	}
+}

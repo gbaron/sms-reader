@@ -1,0 +1,104 @@
+package guyb.carassistant;
+
+import java.util.ArrayList;
+
+import android.app.Activity;
+import android.app.UiModeManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.util.Log;
+import android.view.Menu;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Toast;
+
+public class MainActivity extends Activity implements OnClickListener {
+
+	private static final String TAG = "MainActivity";
+	private static final int MY_DATA_CHECK_CODE = 111;
+
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
+
+		findViewById(R.id.enable_car).setOnClickListener(this);
+		findViewById(R.id.disable_car).setOnClickListener(this);
+
+		 Intent checkIntent = new Intent();
+		 checkIntent.setAction(TextToSpeech.Engine.ACTION_CHECK_TTS_DATA);
+		 startActivityForResult(checkIntent, MY_DATA_CHECK_CODE);
+
+		// mTts = new TextToSpeech(this, this);
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.activity_main, menu);
+		return true;
+	}
+
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+		Log.v(TAG, "MainActivity:onActivityResult ");
+		
+		Bundle b = data.getExtras();
+		ArrayList<String> langs =  b.getStringArrayList(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES);
+		
+		
+		for (String s : langs) {
+			Log.v(TAG, "MainActivity:onActivityResult " + s);	
+		}
+		
+		
+//		if (requestCode == MY_DATA_CHECK_CODE) {
+//
+//			if (resultCode == TextToSpeech.Engine.CHECK_VOICE_DATA_PASS) {
+//				// success, create the TTS instance
+//
+//			} else {
+//				// missing data, install it
+//				Intent installIntent = new Intent();
+//				installIntent
+//						.setAction(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA);
+//				startActivity(installIntent);
+//			}
+//		}
+	}
+
+	@Override
+	public void onClick(View v) {
+
+		String msg = "";
+		UiModeManager uiManager = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
+
+		if (v.getId() == R.id.enable_car) {
+			uiManager.enableCarMode(0);
+			msg = getString(R.string.car_mode_enabled);
+
+		} else if (v.getId() == R.id.disable_car) {
+			uiManager.disableCarMode(0);
+			msg = getString(R.string.car_mode_disabled);
+		}
+
+		Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+	}
+
+	// @Override
+	// public void onUtteranceCompleted(String utteranceId) {
+	// // TODO Auto-generated method stub
+	//
+	// }
+	//
+	// @Override
+	// protected void onDestroy() {
+	// super.onDestroy();
+	//
+	// if (mTts != null)
+	// {
+	// mTts.shutdown();
+	// }
+	// }
+}

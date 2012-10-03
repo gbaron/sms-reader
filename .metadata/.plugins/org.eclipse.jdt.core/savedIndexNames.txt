@@ -1,0 +1,6 @@
+INDEX VERSION 1.126+E:\Guy\My Documents\GitHub\sms-reader\.metadata\.plugins\org.eclipse.jdt.core
+354575404.index
+1142249589.index
+2850281849.index
+1288556026.index
+1335065573.index
